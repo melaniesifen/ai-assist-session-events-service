@@ -1,0 +1,13 @@
+{
+  "name": "ai-assist-session-events-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Transport-neutral session event primitives for the AI Assist Platform.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
