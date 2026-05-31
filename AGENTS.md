@@ -16,8 +16,8 @@
 
 ## Commands
 
-- Run tests with `node --test`.
-- `npm` may not be available in this environment; prefer the direct Node command.
+- Run tests with `PYTHONPATH=src python3 -m unittest discover -s tests`.
+- Keep this repo dependency-free unless a future task explicitly adds repo-local Python dependencies and documents the install/test flow.
 
 ## Review Notes
 

@@ -4,6 +4,8 @@ Update this file as implementation progresses. Check off completed tasks in the 
 
 Canonical cross-repo tasks live in `../ai-assist-architecture/implementation-task-breakdown.md`. This repo owns the session-events portions of `EVT-*`, action status event delivery, `OPS-003`, and `REPO-001` items, grounded by `../ai-assist-architecture/lld-session-events-transport.md`.
 
+Migration gate: The approved direction is to migrate this repo from the temporary JavaScript ESM bootstrap to Python initially; revisit Java only if long-running high-concurrency requirements justify it. Do not continue broad new feature work until that migration is completed or explicitly deferred.
+
 ## Completed Bootstrap
 
 - [x] REPO-001 bootstrap: create dependency-light Node.js ESM package with direct `node:test` coverage commands.
@@ -20,6 +22,7 @@ Canonical cross-repo tasks live in `../ai-assist-architecture/implementation-tas
 ## Pending Architecture Tasks
 
 - [ ] REPO-001: decide final language/runtime, framework, package manager, package layout, migration cost, deployment target, and test strategy for this repo.
+- [x] REPO-002: migrate the session-events bootstrap to a Python package layout initially, with equivalent behavior and tests, before broad new feature work continues; revisit Java only if long-running high-concurrency requirements justify it.
 - [ ] EVT-002: align `SessionEvent` envelope and payload validation with versioned shared contracts after `ai-assist-contracts` publishes them.
 - [ ] EVT-003: add authenticated SSE HTTP route adapter with server-derived identity and session authorization checks.
 - [x] EVT-003: add client reconnect behavior contract tests for `Last-Event-ID`, unavailable replay, duplicate event IDs, and HTTP state refresh guidance.
