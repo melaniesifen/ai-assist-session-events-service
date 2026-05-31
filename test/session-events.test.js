@@ -4,11 +4,16 @@ import test from "node:test";
 import {
   InMemorySessionEventSink,
   InMemorySessionEventPublisher,
+  PUBLISHER_FAILURE_CATEGORIES,
+  STREAM_LOG_OPERATIONS,
+  SessionEventPublisherError,
   SessionEventValidationError,
   assertValidSessionEvent,
   createEventDeduplicator,
+  createStreamLogRecord,
   detectSequenceGap,
   formatSseEvent,
+  reconnectRecoveryGuidance,
   replayStatusForLastEventId,
   validateSessionEvent
 } from "../src/index.js";
@@ -60,6 +65,53 @@ test("throws typed validation errors for invalid events", () => {
   );
 });
 
+test("validates every supported typed payload shape", () => {
+  const cases = [
+    {
+      type: "assistant.delta",
+      payload: { messageId: "msg_001", delta: "hello", index: 0 }
+    },
+    {
+      type: "assistant.final",
+      payload: { messageId: "msg_001", finishReason: "stop", usage: { outputTokens: 10 } }
+    },
+    {
+      type: "progress",
+      payload: { stage: "provider.generating", status: "STARTED", messageCode: "PROVIDER_GENERATING" }
+    },
+    {
+      type: "error",
+      payload: { errorCode: "PROVIDER_TIMEOUT", category: "DEPENDENCY", retryable: true, message: "Try again." }
+    },
+    {
+      type: "action.proposed",
+      payload: {
+        actionId: "act_001",
+        actionType: "google_docs.replace_text",
+        resourceRef: { provider: "google_docs", resourceId: "doc_001" },
+        summary: "Replace selected text.",
+        expiresAt: "2026-05-30T00:00:00.000Z"
+      }
+    },
+    {
+      type: "action.status_changed",
+      payload: { actionId: "act_001", previousStatus: "PROPOSED", status: "APPROVED", reasonCode: "USER_APPROVED" }
+    }
+  ];
+
+  for (const [index, eventCase] of cases.entries()) {
+    assert.deepEqual(
+      validateSessionEvent({
+        ...BASE_EVENT,
+        eventId: `evt_typed_${index}`,
+        type: eventCase.type,
+        payload: eventCase.payload
+      }),
+      { valid: true, issues: [] }
+    );
+  }
+});
+
 test("publishes, subscribes, and replays events after Last-Event-ID", () => {
   const publisher = new InMemorySessionEventPublisher();
   const first = { ...BASE_EVENT, eventId: "evt_001", sequence: 1 };
@@ -106,9 +158,47 @@ test("rejects duplicate event IDs within the retained session buffer", () => {
 
   assert.throws(
     () => publisher.publish({ ...BASE_EVENT, payload: { ...BASE_EVENT.payload, status: "DONE" } }),
-    (error) => error instanceof SessionEventValidationError
-      && error.issues.some((issue) => issue.code === "duplicate_event_id")
+    (error) => error instanceof SessionEventPublisherError
+      && error.category === PUBLISHER_FAILURE_CATEGORIES.PERSISTENCE
+      && error.cause instanceof SessionEventValidationError
+      && error.cause.issues.some((issue) => issue.code === "duplicate_event_id")
   );
+});
+
+test("returns typed publisher failure results without throwing", () => {
+  const publisher = new InMemorySessionEventPublisher();
+  const result = publisher.tryPublish({ ...BASE_EVENT, payload: {} });
+
+  assert.equal(result.ok, false);
+  assert(result.error instanceof SessionEventPublisherError);
+  assert.equal(result.error.category, PUBLISHER_FAILURE_CATEGORIES.VALIDATION);
+  assert.equal(result.error.operation, "validate");
+});
+
+test("reports subscriber delivery failures as non-authoritative diagnostics", () => {
+  const publisher = new InMemorySessionEventPublisher();
+  const delivered = [];
+  publisher.subscribe(BASE_EVENT.sessionId, () => {
+    throw new Error("subscriber unavailable");
+  }, { replay: false });
+  publisher.subscribe(BASE_EVENT.sessionId, (event) => delivered.push(event.eventId), { replay: false });
+
+  const result = publisher.tryPublish(BASE_EVENT);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.deliveryFailures.length, 1);
+  assert.deepEqual(publisher.list(BASE_EVENT.sessionId).map((event) => event.eventId), ["evt_001"]);
+  assert.deepEqual(delivered, ["evt_001"]);
+});
+
+test("does not throw from publish when best-effort subscriber delivery fails", () => {
+  const publisher = new InMemorySessionEventPublisher();
+  publisher.subscribe(BASE_EVENT.sessionId, () => {
+    throw new Error("closed stream");
+  }, { replay: false });
+
+  assert.doesNotThrow(() => publisher.publish(BASE_EVENT));
+  assert.deepEqual(publisher.list(BASE_EVENT.sessionId).map((event) => event.eventId), ["evt_001"]);
 });
 
 test("rejects event IDs that would inject additional SSE field lines", () => {
@@ -136,7 +226,9 @@ test("deduplicates reconnect deliveries by eventId", () => {
 });
 
 test("detects sequence gaps and unavailable replay windows", () => {
-  assert.deepEqual(detectSequenceGap(1, { ...BASE_EVENT, sequence: 3 }), {
+  const sequenceGap = detectSequenceGap(1, { ...BASE_EVENT, sequence: 3 });
+
+  assert.deepEqual(sequenceGap, {
     hasGap: true,
     expectedSequence: 2,
     actualSequence: 3
@@ -145,5 +237,71 @@ test("detects sequence gaps and unavailable replay windows", () => {
   assert.deepEqual(
     replayStatusForLastEventId([{ ...BASE_EVENT, eventId: "evt_002" }], "evt_001"),
     { status: "REPLAY_UNAVAILABLE", events: [] }
+  );
+
+  assert.deepEqual(reconnectRecoveryGuidance({ replayStatus: "PARTIAL_REPLAY", sequenceGap }), {
+    shouldRefreshDurableState: true,
+    reasonCode: "SEQUENCE_GAP",
+    messageCode: "REFRESH_SESSION_STATE"
+  });
+  assert.deepEqual(reconnectRecoveryGuidance({ replayStatus: "REPLAY_UNAVAILABLE" }), {
+    shouldRefreshDurableState: true,
+    reasonCode: "REPLAY_UNAVAILABLE",
+    messageCode: "REFRESH_SESSION_STATE"
+  });
+  assert.deepEqual(
+    reconnectRecoveryGuidance({
+      replayStatus: replayStatusForLastEventId([{ ...BASE_EVENT, eventId: "evt_002" }], "evt_001")
+    }),
+    {
+      shouldRefreshDurableState: true,
+      reasonCode: "REPLAY_UNAVAILABLE",
+      messageCode: "REFRESH_SESSION_STATE"
+    }
+  );
+  assert.deepEqual(reconnectRecoveryGuidance({ replayStatus: "PARTIAL_REPLAY" }), {
+    shouldRefreshDurableState: false,
+    reasonCode: "STREAM_CONTINUITY_OK",
+    messageCode: "CONTINUE_STREAM"
+  });
+});
+
+test("creates metadata-only stream lifecycle log records", () => {
+  assert.deepEqual(
+    createStreamLogRecord(STREAM_LOG_OPERATIONS.REPLAY_MISS, {
+      tenantId: "tenant_001",
+      userId: "user_001",
+      sessionId: "session_001",
+      requestId: "req_001",
+      correlationId: "corr_001",
+      route: "/sessions/session_001/events",
+      lastEventId: "evt_001",
+      replayStatus: "REPLAY_UNAVAILABLE",
+      ignoredField: "not logged"
+    }, { now: () => "2026-05-29T00:00:00.000Z" }),
+    {
+      timestamp: "2026-05-29T00:00:00.000Z",
+      service: "ai-assist-session-events-service",
+      operation: STREAM_LOG_OPERATIONS.REPLAY_MISS,
+      tenantId: "tenant_001",
+      userId: "user_001",
+      sessionId: "session_001",
+      requestId: "req_001",
+      correlationId: "corr_001",
+      route: "/sessions/session_001/events",
+      lastEventId: "evt_001",
+      replayStatus: "REPLAY_UNAVAILABLE"
+    }
+  );
+});
+
+test("rejects sensitive stream log metadata keys at any depth", () => {
+  assert.throws(
+    () => createStreamLogRecord(STREAM_LOG_OPERATIONS.ERROR, {
+      tenantId: "tenant_001",
+      errorCode: "STREAM_FAILED",
+      details: { oauthToken: "secret" }
+    }),
+    /oauthToken/u
   );
 });

@@ -56,3 +56,28 @@ export function replayStatusForLastEventId(events, lastEventId) {
   }
   return { status: "PARTIAL_REPLAY", events: events.slice(index + 1) };
 }
+
+export function reconnectRecoveryGuidance({ replayStatus, sequenceGap } = {}) {
+  if (sequenceGap?.hasGap) {
+    return {
+      shouldRefreshDurableState: true,
+      reasonCode: "SEQUENCE_GAP",
+      messageCode: "REFRESH_SESSION_STATE"
+    };
+  }
+  const replayStatusCode = typeof replayStatus === "string"
+    ? replayStatus
+    : replayStatus?.status;
+  if (replayStatusCode === "REPLAY_UNAVAILABLE") {
+    return {
+      shouldRefreshDurableState: true,
+      reasonCode: "REPLAY_UNAVAILABLE",
+      messageCode: "REFRESH_SESSION_STATE"
+    };
+  }
+  return {
+    shouldRefreshDurableState: false,
+    reasonCode: "STREAM_CONTINUITY_OK",
+    messageCode: "CONTINUE_STREAM"
+  };
+}

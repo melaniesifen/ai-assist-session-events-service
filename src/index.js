@@ -5,8 +5,14 @@ export {
   createSessionEvent,
   validateSessionEvent
 } from "./session-event.js";
-export { SessionEventValidationError } from "./errors.js";
+export { SessionEventPublisherError, SessionEventValidationError } from "./errors.js";
 export { InMemorySessionEventSink } from "./event-sink.js";
-export { InMemorySessionEventPublisher } from "./publisher.js";
+export { InMemorySessionEventPublisher, PUBLISHER_FAILURE_CATEGORIES } from "./publisher.js";
 export { formatSseEvent, formatSseRetry } from "./sse.js";
-export { createEventDeduplicator, detectSequenceGap, replayStatusForLastEventId } from "./reconnect.js";
+export {
+  createEventDeduplicator,
+  detectSequenceGap,
+  reconnectRecoveryGuidance,
+  replayStatusForLastEventId
+} from "./reconnect.js";
+export { STREAM_LOG_OPERATIONS, createStreamLogRecord } from "./stream-log.js";

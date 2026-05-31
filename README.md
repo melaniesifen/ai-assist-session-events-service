@@ -25,6 +25,10 @@ The package is dependency-light Node.js ESM. It exports domain helpers only; it 
 
 SSE is a best-effort display path. Durable state must still be fetched over HTTP after reconnects, browser refreshes, or sequence gaps.
 
+Publisher callers can use `tryPublish` to receive typed publisher failure categories without throwing. Stream adapters should build metadata-only lifecycle records with `createStreamLogRecord`; these helpers reject known sensitive keys and discard unsupported metadata fields.
+
+Future WebSocket trigger checks and adapter constraints are tracked in [ADAPTER-NOTES.md](ADAPTER-NOTES.md).
+
 ## Task Breakdown
 
 Implementation tasks are tracked in [TASKS.md](TASKS.md). Update the checkboxes there in the same change that implements or verifies a task.

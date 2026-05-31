@@ -1,5 +1,11 @@
 import { assertValidSessionEvent } from "./session-event.js";
 import { InMemorySessionEventSink } from "./event-sink.js";
+import { SessionEventPublisherError } from "./errors.js";
+
+export const PUBLISHER_FAILURE_CATEGORIES = Object.freeze({
+  VALIDATION: "VALIDATION",
+  PERSISTENCE: "PERSISTENCE"
+});
 
 export class InMemorySessionEventPublisher {
   #sink;
@@ -10,12 +16,36 @@ export class InMemorySessionEventPublisher {
   }
 
   publish(event) {
-    assertValidSessionEvent(event);
-    this.#sink.append(event);
-    for (const subscriber of this.#subscribersBySession.get(event.sessionId) ?? []) {
-      subscriber(event);
+    const result = this.tryPublish(event);
+    if (!result.ok) {
+      throw result.error;
     }
-    return event;
+    return result.event;
+  }
+
+  tryPublish(event) {
+    try {
+      assertValidSessionEvent(event);
+    } catch (error) {
+      return publisherFailure(PUBLISHER_FAILURE_CATEGORIES.VALIDATION, "validate", error);
+    }
+
+    try {
+      this.#sink.append(event);
+    } catch (error) {
+      return publisherFailure(PUBLISHER_FAILURE_CATEGORIES.PERSISTENCE, "append", error);
+    }
+
+    const deliveryFailures = [];
+    for (const subscriber of this.#subscribersBySession.get(event.sessionId) ?? []) {
+      try {
+        subscriber(event);
+      } catch (error) {
+        deliveryFailures.push(error);
+      }
+    }
+
+    return { ok: true, event, deliveryFailures };
   }
 
   subscribe(sessionId, handler, { lastEventId, replay = true } = {}) {
@@ -53,4 +83,11 @@ export class InMemorySessionEventPublisher {
   list(sessionId) {
     return this.#sink.list(sessionId);
   }
+}
+
+function publisherFailure(category, operation, cause) {
+  return {
+    ok: false,
+    error: new SessionEventPublisherError({ category, operation, cause })
+  };
 }
