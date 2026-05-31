@@ -22,3 +22,16 @@
 ## Review Notes
 
 Before committing, review whether transport helpers remain independent of SSE-specific assumptions and whether future WebSocket can reuse the event contract.
+
+## Commit Messages
+
+All commits in this repo must use this format:
+
+```text
+docs/feat/fix/(or another appropriate type): title of change
+
+problem: <description of problem>
+solution: <description of solution>
+impact: <impact of this change>
+reference: <reference to this change in the docs if applicable>
+```
