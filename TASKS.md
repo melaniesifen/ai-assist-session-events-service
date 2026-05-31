@@ -4,7 +4,7 @@ Update this file as implementation progresses. Check off completed tasks in the 
 
 Canonical cross-repo tasks live in `../ai-assist-architecture/implementation-task-breakdown.md`. This repo owns the session-events portions of `EVT-*`, action status event delivery, `OPS-003`, and `REPO-001` items, grounded by `../ai-assist-architecture/lld-session-events-transport.md`.
 
-Migration gate: The approved direction is to migrate this repo from the temporary JavaScript ESM bootstrap to Python initially; revisit Java only if long-running high-concurrency requirements justify it. Do not continue broad new feature work until that migration is completed or explicitly deferred.
+Migration status: The repo has been migrated from the temporary JavaScript ESM bootstrap to Python initially for the current local package scope. Revisit Java only if long-running high-concurrency requirements justify it. Broad new feature work may continue in Python after the parent migration checkpoint.
 
 ## Completed Bootstrap
 
