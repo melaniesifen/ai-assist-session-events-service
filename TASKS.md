@@ -2,7 +2,7 @@
 
 Update this file as implementation progresses. Check off completed tasks in the same change that implements them.
 
-Canonical cross-repo tasks live in `../ai-assist-architecture/implementation-task-breakdown.md`. This repo owns the session-events portions of `EVT-*`, action status event delivery, `OPS-003`, and `REPO-001` items, grounded by `../ai-assist-architecture/lld-session-events-transport.md`.
+Canonical cross-repo tasks live in `../ai-assist-architecture/implementation-task-breakdown.md`. This repo owns the session-events portions of `EVT-*`, action status event delivery, `OPS-003`, and `REPO-001` items, grounded by `../ai-assist-architecture/lld-session-events-transport.md`. `REPO-001 bootstrap` names the original temporary Node.js package setup; the pending final `REPO-001` item is the language/runtime/package-structure decision from the workspace task list. Any `INFRA-004`, `OPS-004`, `OPS-005`, or `E2E-005` item listed here is the session-events-owned deployment, metrics, redaction-check, or operational-validation slice of that cross-cutting task.
 
 Migration status: The repo has been migrated from the temporary JavaScript ESM bootstrap to Python initially for the current local package scope. Revisit Java only if long-running high-concurrency requirements justify it. Broad new feature work may continue in Python after the parent migration checkpoint.
 
