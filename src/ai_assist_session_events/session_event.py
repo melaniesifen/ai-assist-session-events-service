@@ -31,6 +31,13 @@ ERROR_CATEGORIES = (
     "INTERNAL",
 )
 
+PROGRESS_STATUSES = (
+    "started",
+    "in_progress",
+    "completed",
+    "skipped",
+)
+
 REQUIRED_STRING_FIELDS = (
     "eventId",
     "tenantId",
@@ -50,12 +57,99 @@ FORBIDDEN_PAYLOAD_KEYS = frozenset(
         "accessToken",
         "refreshToken",
         "decryptedPayload",
+        "decryptedActionPayload",
+        "decryptedSessionSecret",
         "sessionSecret",
+        "prompt",
+        "rawPrompt",
+        "documentText",
+        "selectedText",
+        "modelResponse",
+        "screenshot",
+        "ocrText",
+        "accessibilityTree",
+        "authorization",
+        "authorizationHeader",
+        "bearerToken",
+        "actionPayload",
+        "cookie",
     )
 )
 
 MAX_PAYLOAD_BYTES = 64 * 1024
 MAX_SAFE_INTEGER = (2**53) - 1
+
+
+def create_progress_event(
+    envelope: dict[str, Any],
+    *,
+    stage: str,
+    status: str,
+    message_code: str,
+    now: Callable[[], str] | None = None,
+) -> dict[str, Any]:
+    return _create_typed_session_event(
+        "progress",
+        envelope,
+        {"stage": stage, "status": status, "messageCode": message_code},
+        now=now,
+    )
+
+
+def create_assistant_delta_event(
+    envelope: dict[str, Any],
+    *,
+    message_id: str,
+    delta: str,
+    index: int,
+    now: Callable[[], str] | None = None,
+) -> dict[str, Any]:
+    return _create_typed_session_event(
+        "assistant.delta",
+        envelope,
+        {"messageId": message_id, "delta": delta, "index": index},
+        now=now,
+    )
+
+
+def create_assistant_final_event(
+    envelope: dict[str, Any],
+    *,
+    message_id: str,
+    finish_reason: str,
+    usage: dict[str, Any] | None = None,
+    now: Callable[[], str] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"messageId": message_id, "finishReason": finish_reason}
+    if usage is not None:
+        payload["usage"] = usage
+    return _create_typed_session_event("assistant.final", envelope, payload, now=now)
+
+
+def create_safe_error_event(
+    envelope: dict[str, Any],
+    *,
+    error_code: str,
+    category: str,
+    retryable: bool,
+    message: str,
+    metadata: dict[str, Any] | None = None,
+    now: Callable[[], str] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "errorCode": error_code,
+        "category": category,
+        "retryable": retryable,
+        "message": message,
+    }
+    if metadata is not None:
+        payload["metadata"] = metadata
+    return _create_typed_session_event(
+        "error",
+        envelope,
+        payload,
+        now=now,
+    )
 
 
 def validate_session_event(event: Any) -> dict[str, Any]:
@@ -139,6 +233,16 @@ def create_session_event(input_event: dict[str, Any], *, now: Callable[[], str] 
     return assert_valid_session_event(event)
 
 
+def _create_typed_session_event(
+    event_type: str,
+    envelope: dict[str, Any],
+    payload: dict[str, Any],
+    *,
+    now: Callable[[], str] | None = None,
+) -> dict[str, Any]:
+    return create_session_event({**envelope, "type": event_type, "payload": payload}, now=now)
+
+
 def _validate_payload(event_type: str | None, payload: dict[str, Any]) -> list[dict[str, str]]:
     if event_type == "assistant.delta":
         return _require_fields(
@@ -165,7 +269,7 @@ def _validate_payload(event_type: str | None, payload: dict[str, Any]) -> list[d
             payload,
             (
                 ("stage", _is_non_blank_string),
-                ("status", _is_non_blank_string),
+                ("status", lambda value: value in PROGRESS_STATUSES),
                 ("messageCode", _is_non_blank_string),
             ),
         )

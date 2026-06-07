@@ -19,6 +19,15 @@ Migration status: The repo has been migrated from the temporary JavaScript ESM b
 - [x] OPS-003 bootstrap: reject obvious secret/raw-content payload keys and keep transport helpers free of content logging.
 - [x] Repo hygiene: document tests and coverage commands, and ignore prompts, feedback, coverage output, dependencies, and build artifacts.
 
+## Completed M5-T2 Session-Events SSE Support
+
+- [x] M5-T2: verify event envelope validation for progress, assistant delta, assistant final, and safe error payloads.
+- [x] M5-T2: add typed constructors for progress, assistant delta, assistant final, and safe error envelopes for local SSE and harness callers.
+- [x] M5-T2: verify local SSE formatting with `id`, `event`, and JSON `data`.
+- [x] M5-T2: verify replay, duplicate-event, sequence-gap, and malformed-event behavior needed by the M5 harness.
+- [x] M5-T2: verify metadata-only stream lifecycle logs.
+- [x] M5-T2: run session-events unit tests and compile checks.
+
 ## Pending Architecture Tasks
 
 - [ ] REPO-001: decide final language/runtime, framework, package manager, package layout, migration cost, deployment target, and test strategy for this repo.

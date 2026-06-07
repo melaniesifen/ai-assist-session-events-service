@@ -9,7 +9,11 @@ from ai_assist_session_events import (
     SessionEventPublisherError,
     SessionEventValidationError,
     assert_valid_session_event,
+    create_assistant_delta_event,
+    create_assistant_final_event,
     create_event_deduplicator,
+    create_progress_event,
+    create_safe_error_event,
     create_session_event,
     create_stream_log_record,
     detect_sequence_gap,
@@ -32,9 +36,20 @@ BASE_EVENT = {
     "createdAt": "2026-05-29T00:00:00.000Z",
     "payload": {
         "stage": "context.loading",
-        "status": "STARTED",
+        "status": "started",
         "messageCode": "CONTEXT_LOADING",
     },
+}
+
+
+BASE_ENVELOPE = {
+    "eventId": "evt_001",
+    "tenantId": "tenant_001",
+    "userId": "user_001",
+    "sessionId": "session_001",
+    "requestId": "req_001",
+    "correlationId": "corr_001",
+    "sequence": 1,
 }
 
 
@@ -89,7 +104,7 @@ class SessionEventsTest(unittest.TestCase):
         cases = [
             ("assistant.delta", {"messageId": "msg_001", "delta": "hello", "index": 0}),
             ("assistant.final", {"messageId": "msg_001", "finishReason": "stop", "usage": {"outputTokens": 10}}),
-            ("progress", {"stage": "provider.generating", "status": "STARTED", "messageCode": "PROVIDER_GENERATING"}),
+            ("progress", {"stage": "provider.generating", "status": "in_progress", "messageCode": "PROVIDER_GENERATING"}),
             ("error", {"errorCode": "PROVIDER_TIMEOUT", "category": "DEPENDENCY", "retryable": True, "message": "Try again."}),
             (
                 "action.proposed",
@@ -113,6 +128,100 @@ class SessionEventsTest(unittest.TestCase):
                     validate_session_event(event_with(eventId=f"evt_typed_{index}", type=event_type, payload=payload)),
                     {"valid": True, "issues": []},
                 )
+
+    def test_creates_full_m5_stream_event_envelopes_for_sse_delivery(self):
+        cases = [
+            create_progress_event(
+                {**BASE_ENVELOPE, "eventId": "evt_progress", "sequence": 1},
+                stage="context.loading",
+                status="started",
+                message_code="CONTEXT_LOADING",
+                now=lambda: "2026-05-29T00:00:00.000Z",
+            ),
+            create_assistant_delta_event(
+                {**BASE_ENVELOPE, "eventId": "evt_delta", "sequence": 2},
+                message_id="msg_001",
+                delta="hello",
+                index=0,
+                now=lambda: "2026-05-29T00:00:01.000Z",
+            ),
+            create_assistant_final_event(
+                {**BASE_ENVELOPE, "eventId": "evt_final", "sequence": 3},
+                message_id="msg_001",
+                finish_reason="stop",
+                usage={"outputTokens": 10},
+                now=lambda: "2026-05-29T00:00:02.000Z",
+            ),
+            create_safe_error_event(
+                {**BASE_ENVELOPE, "eventId": "evt_error", "sequence": 4},
+                error_code="PROVIDER_UNAVAILABLE",
+                category="DEPENDENCY",
+                retryable=True,
+                message="The assistant service is unavailable. Try again.",
+                now=lambda: "2026-05-29T00:00:03.000Z",
+            ),
+        ]
+
+        self.assertEqual(
+            [event["type"] for event in cases],
+            ["progress", "assistant.delta", "assistant.final", "error"],
+        )
+        for event in cases:
+            with self.subTest(event_type=event["type"]):
+                self.assertEqual(validate_session_event(event), {"valid": True, "issues": []})
+                formatted = format_sse_event(event)
+                self.assertIn(f"id: {event['eventId']}\n", formatted)
+                self.assertIn(f"event: {event['type']}\n", formatted)
+                self.assertIn(f'data: {{"eventId":"{event["eventId"]}"', formatted)
+
+    def test_typed_error_event_constructor_rejects_forbidden_payload_keys(self):
+        with self.assertRaises(SessionEventValidationError) as caught:
+            create_safe_error_event(
+                BASE_ENVELOPE,
+                error_code="PROVIDER_UNAVAILABLE",
+                category="DEPENDENCY",
+                retryable=True,
+                message="Try again.",
+                metadata={"providerKey": "secret"},
+                now=lambda: "2026-05-29T00:00:00.000Z",
+            )
+
+        self.assertTrue(any(issue["path"] == "payload.metadata.providerKey" for issue in caught.exception.issues))
+
+    def test_rejects_progress_status_values_outside_shared_contract(self):
+        result = validate_session_event(
+            event_with(
+                payload={
+                    "stage": "context.loading",
+                    "status": "STARTED",
+                    "messageCode": "CONTEXT_LOADING",
+                }
+            )
+        )
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(any(issue["path"] == "payload.status" for issue in result["issues"]))
+
+    def test_typed_error_event_constructor_rejects_sensitive_error_metadata_keys(self):
+        sensitive_metadata_cases = [
+            ("documentText", {"documentText": "raw document text"}),
+            ("authorizationHeader", {"authorizationHeader": "Bearer secret"}),
+            ("nestedSelectedText", {"dependency": {"selectedText": "raw selection"}}),
+        ]
+
+        for _, metadata in sensitive_metadata_cases:
+            with self.subTest(metadata=metadata), self.assertRaises(SessionEventValidationError) as caught:
+                create_safe_error_event(
+                    BASE_ENVELOPE,
+                    error_code="PROVIDER_UNAVAILABLE",
+                    category="DEPENDENCY",
+                    retryable=True,
+                    message="Try again.",
+                    metadata=metadata,
+                    now=lambda: "2026-05-29T00:00:00.000Z",
+                )
+
+            self.assertTrue(any(issue["code"] == "forbidden_payload_key" for issue in caught.exception.issues))
 
     def test_publishes_subscribes_and_replays_events_after_last_event_id(self):
         publisher = InMemorySessionEventPublisher()
@@ -164,7 +273,7 @@ class SessionEventsTest(unittest.TestCase):
         publisher.publish(BASE_EVENT)
 
         with self.assertRaises(SessionEventPublisherError) as caught:
-            publisher.publish(event_with(payload={**BASE_EVENT["payload"], "status": "DONE"}))
+            publisher.publish(event_with(payload={**BASE_EVENT["payload"], "messageCode": "CONTEXT_STARTED"}))
 
         error = caught.exception
         self.assertEqual(error.category, PUBLISHER_FAILURE_CATEGORIES["PERSISTENCE"])
