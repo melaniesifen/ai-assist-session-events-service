@@ -295,6 +295,44 @@ class SessionEventsTest(unittest.TestCase):
         self.assertTrue(any(issue["path"] == "payload.previousStatus" for issue in result["issues"]))
         self.assertTrue(any(issue["path"] == "payload.status" for issue in result["issues"]))
 
+    def test_action_status_changed_accepts_contract_apply_lifecycle_states(self):
+        apply_result_cases = [
+            ("APPLIED", "APPLY_SUCCEEDED"),
+            ("CONFLICTED", "TARGET_CONFLICTED"),
+            ("FAILED", "APPLY_FAILED"),
+            ("EXPIRED", "ACTION_EXPIRED"),
+            ("FAILED", "AUTHORIZATION_DENIED"),
+            ("FAILED", "OAUTH_RECONNECT_REQUIRED"),
+        ]
+
+        for index, (status, reason_code) in enumerate(apply_result_cases):
+            with self.subTest(status=status):
+                event = create_action_status_changed_event(
+                    {**BASE_ENVELOPE, "eventId": f"evt_apply_status_{index}", "sequence": index + 10},
+                    action_id="act_001",
+                    previous_status="APPROVED",
+                    status=status,
+                    reason_code=reason_code,
+                    now=lambda: "2026-06-07T00:00:00.000Z",
+                )
+
+                self.assertEqual(validate_session_event(event), {"valid": True, "issues": []})
+
+    def test_action_status_changed_rejects_non_contract_apply_status_labels(self):
+        for field_name in ("previousStatus", "status"):
+            with self.subTest(field_name=field_name):
+                payload = {
+                    "actionId": "act_001",
+                    "previousStatus": "APPROVED",
+                    "status": "FAILED",
+                    "reasonCode": "OAUTH_RECONNECT_REQUIRED",
+                    field_name: "RECONNECT_REQUIRED",
+                }
+                result = validate_session_event(event_with(type="action.status_changed", payload=payload))
+
+                self.assertFalse(result["valid"])
+                self.assertTrue(any(issue["path"] == f"payload.{field_name}" for issue in result["issues"]))
+
     def test_action_events_reject_sensitive_payload_fields_at_any_depth(self):
         result = validate_session_event(
             event_with(
@@ -312,6 +350,34 @@ class SessionEventsTest(unittest.TestCase):
 
         self.assertFalse(result["valid"])
         self.assertTrue(any(issue["path"] == "payload.metadata.decryptedActionPayload" for issue in result["issues"]))
+
+    def test_action_status_changed_rejects_sensitive_apply_payload_fields_before_publish(self):
+        sensitive_apply_fields = [
+            ("applyPayload", {"applyPayload": {"operation": "replace"}}),
+            ("mutationPayload", {"metadata": {"mutationPayload": {"operation": "insert"}}}),
+            ("replacementText", {"metadata": {"result": {"replacementText": "plaintext"}}}),
+            ("insertionText", {"metadata": {"result": {"insertionText": "plaintext"}}}),
+            ("originalText", {"metadata": {"target": {"originalText": "plaintext"}}}),
+            ("newText", {"metadata": {"diff": {"newText": "plaintext"}}}),
+            ("oldText", {"metadata": {"diff": {"oldText": "plaintext"}}}),
+        ]
+
+        for field_name, extra_payload in sensitive_apply_fields:
+            with self.subTest(field_name=field_name):
+                payload = {
+                    "actionId": "act_001",
+                    "previousStatus": "APPROVED",
+                    "status": "APPLIED",
+                    "reasonCode": "APPLY_SUCCEEDED",
+                    **extra_payload,
+                }
+                result = InMemorySessionEventPublisher().try_publish(
+                    event_with(type="action.status_changed", payload=payload)
+                )
+
+                self.assertFalse(result.ok)
+                self.assertEqual(result.error.operation, "validate")
+                self.assertTrue(any(issue["code"] == "forbidden_payload_key" for issue in result.error.cause.issues))
 
     def test_publishes_replays_and_deduplicates_action_events(self):
         publisher = InMemorySessionEventPublisher()

@@ -36,6 +36,13 @@ Migration status: The repo has been migrated from the temporary JavaScript ESM b
 - [x] M6-T3: reject sensitive fields in action event payloads before publish.
 - [x] M6-T3: run session-events unit tests and compile checks.
 
+## Completed M7-T5 Session-Events Apply Status Events
+
+- [x] M7-T5 session-events: verify `action.status_changed` payload validation for applied, conflicted, failed, expired, and safe failed denial/reconnect-required apply paths using contract-compatible status plus reason codes.
+- [x] M7-T5 session-events: reject sensitive apply payload fields before publish, including plaintext mutation and decrypted action payload fields at nested paths.
+- [x] M7-T5 session-events: keep runtime event/type/status names generic, with no milestone-specific runtime names.
+- [x] M7-T5 session-events: run session-events unit tests and compile checks.
+
 ## Pending Architecture Tasks
 
 - [ ] REPO-001: decide final language/runtime, framework, package manager, package layout, migration cost, deployment target, and test strategy for this repo.
