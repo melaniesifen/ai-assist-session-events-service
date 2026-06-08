@@ -28,6 +28,14 @@ Migration status: The repo has been migrated from the temporary JavaScript ESM b
 - [x] M5-T2: verify metadata-only stream lifecycle logs.
 - [x] M5-T2: run session-events unit tests and compile checks.
 
+## Completed M6-T3 Session-Events Action Events
+
+- [x] M6-T3: verify full `SessionEvent` envelope validation for `action.proposed`.
+- [x] M6-T3: verify full `SessionEvent` envelope validation for `action.status_changed`.
+- [x] M6-T3: verify SSE formatting, replay, dedupe, and malformed payload handling for action events.
+- [x] M6-T3: reject sensitive fields in action event payloads before publish.
+- [x] M6-T3: run session-events unit tests and compile checks.
+
 ## Pending Architecture Tasks
 
 - [ ] REPO-001: decide final language/runtime, framework, package manager, package layout, migration cost, deployment target, and test strategy for this repo.
@@ -36,9 +44,10 @@ Migration status: The repo has been migrated from the temporary JavaScript ESM b
 - [ ] EVT-003: add authenticated SSE HTTP route adapter with server-derived identity and session authorization checks.
 - [x] EVT-003: add client reconnect behavior contract tests for `Last-Event-ID`, unavailable replay, duplicate event IDs, and HTTP state refresh guidance.
 - [ ] EVT-003 / E2E-002: add integration tests for authenticated SSE streaming of progress, assistant delta, assistant final, error, and action events.
-- [ ] EVT-003: ensure assistant delta, assistant final, progress, error, action proposed, and action status changed event types are covered by shared payload tests.
+- [x] EVT-003: ensure assistant delta, assistant final, progress, error, action proposed, and action status changed event types are covered by shared payload tests.
 - [x] EVT-004: add event publisher interface for orchestration with typed publisher failure categories.
 - [ ] EVT-004: verify publisher failures cannot corrupt durable command/action state owned by other services.
+- [x] EVT-004: verify local publisher handoff, replay, and dedupe behavior for action proposed and action status changed events.
 - [ ] EVT-004 / E2E-003: add integration tests for orchestration publisher handoff, action proposed events, and action status changed events.
 - [x] EVT-005: document future WebSocket trigger checklist and adapter constraints in repo-local adapter notes when transport work starts.
 - [x] OPS-003: add metadata-only logging rules for stream opens, closes, errors, replay misses, and sequence gaps.

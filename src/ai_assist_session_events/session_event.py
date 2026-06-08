@@ -38,6 +38,23 @@ PROGRESS_STATUSES = (
     "skipped",
 )
 
+CONNECTORS = ("google_docs",)
+
+PROPOSED_ACTION_TYPES = (
+    "REPLACE_TEXT",
+    "INSERT_TEXT",
+)
+
+PROPOSED_ACTION_STATUSES = (
+    "PROPOSED",
+    "APPROVED",
+    "APPLIED",
+    "REJECTED",
+    "EXPIRED",
+    "CONFLICTED",
+    "FAILED",
+)
+
 REQUIRED_STRING_FIELDS = (
     "eventId",
     "tenantId",
@@ -148,6 +165,52 @@ def create_safe_error_event(
         "error",
         envelope,
         payload,
+        now=now,
+    )
+
+
+def create_action_proposed_event(
+    envelope: dict[str, Any],
+    *,
+    action_id: str,
+    action_type: str,
+    resource_ref: dict[str, Any],
+    summary: str,
+    expires_at: str,
+    now: Callable[[], str] | None = None,
+) -> dict[str, Any]:
+    return _create_typed_session_event(
+        "action.proposed",
+        envelope,
+        {
+            "actionId": action_id,
+            "actionType": action_type,
+            "resourceRef": resource_ref,
+            "summary": summary,
+            "expiresAt": expires_at,
+        },
+        now=now,
+    )
+
+
+def create_action_status_changed_event(
+    envelope: dict[str, Any],
+    *,
+    action_id: str,
+    previous_status: str,
+    status: str,
+    reason_code: str,
+    now: Callable[[], str] | None = None,
+) -> dict[str, Any]:
+    return _create_typed_session_event(
+        "action.status_changed",
+        envelope,
+        {
+            "actionId": action_id,
+            "previousStatus": previous_status,
+            "status": status,
+            "reasonCode": reason_code,
+        },
         now=now,
     )
 
@@ -284,34 +347,68 @@ def _validate_payload(event_type: str | None, payload: dict[str, Any]) -> list[d
             ),
         )
     if event_type == "action.proposed":
-        return _require_fields(
+        issues = _require_fields(
             payload,
             (
                 ("actionId", _is_non_blank_string),
-                ("actionType", _is_non_blank_string),
+                ("actionType", lambda value: value in PROPOSED_ACTION_TYPES),
                 ("resourceRef", _is_plain_object),
                 ("summary", _is_non_blank_string),
                 ("expiresAt", _is_iso_date_string),
             ),
         )
+        if _is_plain_object(payload.get("resourceRef")):
+            issues.extend(_validate_resource_ref(payload["resourceRef"]))
+        return issues
     if event_type == "action.status_changed":
         return _require_fields(
             payload,
             (
                 ("actionId", _is_non_blank_string),
-                ("previousStatus", _is_non_blank_string),
-                ("status", _is_non_blank_string),
+                ("previousStatus", lambda value: value in PROPOSED_ACTION_STATUSES),
+                ("status", lambda value: value in PROPOSED_ACTION_STATUSES),
                 ("reasonCode", _is_non_blank_string),
             ),
         )
     return []
 
 
+def _validate_resource_ref(resource_ref: dict[str, Any]) -> list[dict[str, str]]:
+    issues = _require_fields_with_prefix(
+        resource_ref,
+        (
+            ("connector", lambda value: value in CONNECTORS),
+            ("resourceId", _is_non_blank_string),
+            ("resourceType", _is_non_blank_string),
+        ),
+        path_prefix="payload.resourceRef",
+    )
+    for optional_field in ("displayName", "externalUrl"):
+        if optional_field in resource_ref and not _is_non_blank_string(resource_ref[optional_field]):
+            issues.append(
+                {
+                    "path": f"payload.resourceRef.{optional_field}",
+                    "code": "invalid_field",
+                    "message": f"{optional_field} is invalid",
+                }
+            )
+    return issues
+
+
 def _require_fields(payload: dict[str, Any], rules: tuple[tuple[str, Callable[[Any], bool]], ...]) -> list[dict[str, str]]:
+    return _require_fields_with_prefix(payload, rules, path_prefix="payload")
+
+
+def _require_fields_with_prefix(
+    payload: dict[str, Any],
+    rules: tuple[tuple[str, Callable[[Any], bool]], ...],
+    *,
+    path_prefix: str,
+) -> list[dict[str, str]]:
     issues = []
     for field, predicate in rules:
         if not predicate(payload.get(field)):
-            issues.append({"path": f"payload.{field}", "code": "invalid_field", "message": f"{field} is invalid or missing"})
+            issues.append({"path": f"{path_prefix}.{field}", "code": "invalid_field", "message": f"{field} is invalid or missing"})
     return issues
 
 

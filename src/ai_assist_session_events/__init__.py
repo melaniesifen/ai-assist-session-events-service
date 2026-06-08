@@ -9,7 +9,11 @@ from .reconnect import (
 )
 from .session_event import (
     ERROR_CATEGORIES,
+    PROPOSED_ACTION_STATUSES,
+    PROPOSED_ACTION_TYPES,
     SESSION_EVENT_TYPES,
+    create_action_proposed_event,
+    create_action_status_changed_event,
     assert_valid_session_event,
     create_assistant_delta_event,
     create_assistant_final_event,
@@ -24,6 +28,8 @@ from .stream_log import STREAM_LOG_OPERATIONS, create_stream_log_record
 __all__ = [
     "ERROR_CATEGORIES",
     "PUBLISHER_FAILURE_CATEGORIES",
+    "PROPOSED_ACTION_STATUSES",
+    "PROPOSED_ACTION_TYPES",
     "SESSION_EVENT_TYPES",
     "STREAM_LOG_OPERATIONS",
     "InMemorySessionEventPublisher",
@@ -31,6 +37,8 @@ __all__ = [
     "SessionEventPublisherError",
     "SessionEventValidationError",
     "assert_valid_session_event",
+    "create_action_proposed_event",
+    "create_action_status_changed_event",
     "create_assistant_delta_event",
     "create_assistant_final_event",
     "create_event_deduplicator",

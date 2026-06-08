@@ -8,6 +8,8 @@ from ai_assist_session_events import (
     STREAM_LOG_OPERATIONS,
     SessionEventPublisherError,
     SessionEventValidationError,
+    create_action_proposed_event,
+    create_action_status_changed_event,
     assert_valid_session_event,
     create_assistant_delta_event,
     create_assistant_final_event,
@@ -50,6 +52,13 @@ BASE_ENVELOPE = {
     "requestId": "req_001",
     "correlationId": "corr_001",
     "sequence": 1,
+}
+
+GOOGLE_DOCS_RESOURCE_REF = {
+    "connector": "google_docs",
+    "resourceId": "doc_001",
+    "resourceType": "document",
+    "displayName": "Quarterly plan",
 }
 
 
@@ -110,8 +119,8 @@ class SessionEventsTest(unittest.TestCase):
                 "action.proposed",
                 {
                     "actionId": "act_001",
-                    "actionType": "google_docs.replace_text",
-                    "resourceRef": {"provider": "google_docs", "resourceId": "doc_001"},
+                    "actionType": "REPLACE_TEXT",
+                    "resourceRef": GOOGLE_DOCS_RESOURCE_REF,
                     "summary": "Replace selected text.",
                     "expiresAt": "2026-05-30T00:00:00.000Z",
                 },
@@ -173,6 +182,167 @@ class SessionEventsTest(unittest.TestCase):
                 self.assertIn(f"id: {event['eventId']}\n", formatted)
                 self.assertIn(f"event: {event['type']}\n", formatted)
                 self.assertIn(f'data: {{"eventId":"{event["eventId"]}"', formatted)
+
+    def test_creates_full_action_event_envelopes_for_sse_delivery(self):
+        cases = [
+            create_action_proposed_event(
+                {**BASE_ENVELOPE, "eventId": "evt_action_proposed", "sequence": 5},
+                action_id="act_001",
+                action_type="REPLACE_TEXT",
+                resource_ref=GOOGLE_DOCS_RESOURCE_REF,
+                summary="Replace selected text.",
+                expires_at="2026-05-30T00:00:00.000Z",
+                now=lambda: "2026-05-29T00:00:04.000Z",
+            ),
+            create_action_status_changed_event(
+                {**BASE_ENVELOPE, "eventId": "evt_action_status", "sequence": 6},
+                action_id="act_001",
+                previous_status="PROPOSED",
+                status="APPROVED",
+                reason_code="USER_APPROVED",
+                now=lambda: "2026-05-29T00:00:05.000Z",
+            ),
+        ]
+
+        self.assertEqual([event["type"] for event in cases], ["action.proposed", "action.status_changed"])
+        for event in cases:
+            with self.subTest(event_type=event["type"]):
+                self.assertEqual(validate_session_event(event), {"valid": True, "issues": []})
+                formatted = format_sse_event(event)
+                self.assertIn(f"id: {event['eventId']}\n", formatted)
+                self.assertIn(f"event: {event['type']}\n", formatted)
+                self.assertIn(f'data: {{"eventId":"{event["eventId"]}"', formatted)
+
+    def test_action_proposed_requires_contract_shaped_payload(self):
+        invalid_cases = [
+            (
+                "unsupported_action_type",
+                {
+                    "actionId": "act_001",
+                    "actionType": "google_docs.replace_text",
+                    "resourceRef": GOOGLE_DOCS_RESOURCE_REF,
+                    "summary": "Replace selected text.",
+                    "expiresAt": "2026-05-30T00:00:00.000Z",
+                },
+                "payload.actionType",
+            ),
+            (
+                "incomplete_resource_ref",
+                {
+                    "actionId": "act_001",
+                    "actionType": "REPLACE_TEXT",
+                    "resourceRef": {"resourceId": "doc_001"},
+                    "summary": "Replace selected text.",
+                    "expiresAt": "2026-05-30T00:00:00.000Z",
+                },
+                "payload.resourceRef.connector",
+            ),
+            (
+                "unsupported_connector",
+                {
+                    "actionId": "act_001",
+                    "actionType": "REPLACE_TEXT",
+                    "resourceRef": {**GOOGLE_DOCS_RESOURCE_REF, "connector": "made_up_connector"},
+                    "summary": "Replace selected text.",
+                    "expiresAt": "2026-05-30T00:00:00.000Z",
+                },
+                "payload.resourceRef.connector",
+            ),
+            (
+                "blank_optional_resource_display_name",
+                {
+                    "actionId": "act_001",
+                    "actionType": "REPLACE_TEXT",
+                    "resourceRef": {**GOOGLE_DOCS_RESOURCE_REF, "displayName": " "},
+                    "summary": "Replace selected text.",
+                    "expiresAt": "2026-05-30T00:00:00.000Z",
+                },
+                "payload.resourceRef.displayName",
+            ),
+            (
+                "invalid_expiry",
+                {
+                    "actionId": "act_001",
+                    "actionType": "REPLACE_TEXT",
+                    "resourceRef": GOOGLE_DOCS_RESOURCE_REF,
+                    "summary": "Replace selected text.",
+                    "expiresAt": "tomorrow",
+                },
+                "payload.expiresAt",
+            ),
+        ]
+
+        for name, payload, path in invalid_cases:
+            with self.subTest(name=name):
+                result = validate_session_event(event_with(type="action.proposed", payload=payload))
+                self.assertFalse(result["valid"])
+                self.assertTrue(any(issue["path"] == path for issue in result["issues"]))
+
+    def test_action_status_changed_requires_known_statuses(self):
+        result = validate_session_event(
+            event_with(
+                type="action.status_changed",
+                payload={
+                    "actionId": "act_001",
+                    "previousStatus": "proposed",
+                    "status": "DONE",
+                    "reasonCode": "USER_APPROVED",
+                },
+            )
+        )
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(any(issue["path"] == "payload.previousStatus" for issue in result["issues"]))
+        self.assertTrue(any(issue["path"] == "payload.status" for issue in result["issues"]))
+
+    def test_action_events_reject_sensitive_payload_fields_at_any_depth(self):
+        result = validate_session_event(
+            event_with(
+                type="action.proposed",
+                payload={
+                    "actionId": "act_001",
+                    "actionType": "REPLACE_TEXT",
+                    "resourceRef": GOOGLE_DOCS_RESOURCE_REF,
+                    "summary": "Replace selected text.",
+                    "expiresAt": "2026-05-30T00:00:00.000Z",
+                    "metadata": {"decryptedActionPayload": {"replacementText": "secret"}},
+                },
+            )
+        )
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(any(issue["path"] == "payload.metadata.decryptedActionPayload" for issue in result["issues"]))
+
+    def test_publishes_replays_and_deduplicates_action_events(self):
+        publisher = InMemorySessionEventPublisher()
+        proposed = create_action_proposed_event(
+            {**BASE_ENVELOPE, "eventId": "evt_action_proposed", "sequence": 5},
+            action_id="act_001",
+            action_type="REPLACE_TEXT",
+            resource_ref=GOOGLE_DOCS_RESOURCE_REF,
+            summary="Replace selected text.",
+            expires_at="2026-05-30T00:00:00.000Z",
+            now=lambda: "2026-05-29T00:00:04.000Z",
+        )
+        status_changed = create_action_status_changed_event(
+            {**BASE_ENVELOPE, "eventId": "evt_action_status", "sequence": 6},
+            action_id="act_001",
+            previous_status="PROPOSED",
+            status="APPROVED",
+            reason_code="USER_APPROVED",
+            now=lambda: "2026-05-29T00:00:05.000Z",
+        )
+
+        publisher.publish(proposed)
+        publisher.publish(status_changed)
+
+        replay = publisher.subscribe(BASE_EVENT["sessionId"], lambda _event: None, last_event_id="evt_action_proposed")
+        deduplicator = create_event_deduplicator(initial_event_ids=["evt_action_proposed"])
+
+        self.assertEqual(replay.replay_status, "PARTIAL_REPLAY")
+        self.assertEqual([event["eventId"] for event in replay.replayed], ["evt_action_status"])
+        self.assertFalse(deduplicator.should_process(proposed))
+        self.assertTrue(deduplicator.should_process(status_changed))
 
     def test_typed_error_event_constructor_rejects_forbidden_payload_keys(self):
         with self.assertRaises(SessionEventValidationError) as caught:
