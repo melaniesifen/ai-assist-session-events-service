@@ -13,6 +13,7 @@
 - Support deduplication and reconnect behavior without assuming exactly-once delivery.
 - Do not log secrets or raw prompt/document/model-response content in transport logs.
 - Add tests for envelope validation, duplicate events, sequence gaps, replay unavailable, SSE formatting, and sensitive payload rejection.
+- Keep tests split by source responsibility where practical, and put shared fixtures/helpers in `tests/common.py`.
 
 ## Commands
 
