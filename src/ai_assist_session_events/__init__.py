@@ -1,5 +1,12 @@
 from .errors import SessionEventPublisherError, SessionEventValidationError
 from .event_sink import InMemorySessionEventSink
+from .http_sse import (
+    SSE_CONTENT_TYPE,
+    SSE_HEARTBEAT_FRAME,
+    SessionAuthorization,
+    SseHttpStreamAdapter,
+    create_sse_response_headers,
+)
 from .publisher import InMemorySessionEventPublisher, PUBLISHER_FAILURE_CATEGORIES
 from .reconnect import (
     create_event_deduplicator,
@@ -31,11 +38,15 @@ __all__ = [
     "PROPOSED_ACTION_STATUSES",
     "PROPOSED_ACTION_TYPES",
     "SESSION_EVENT_TYPES",
+    "SSE_CONTENT_TYPE",
+    "SSE_HEARTBEAT_FRAME",
     "STREAM_LOG_OPERATIONS",
     "InMemorySessionEventPublisher",
     "InMemorySessionEventSink",
     "SessionEventPublisherError",
     "SessionEventValidationError",
+    "SessionAuthorization",
+    "SseHttpStreamAdapter",
     "assert_valid_session_event",
     "create_action_proposed_event",
     "create_action_status_changed_event",
@@ -45,6 +56,7 @@ __all__ = [
     "create_progress_event",
     "create_safe_error_event",
     "create_session_event",
+    "create_sse_response_headers",
     "create_stream_log_record",
     "detect_sequence_gap",
     "format_sse_event",

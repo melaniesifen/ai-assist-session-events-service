@@ -43,12 +43,19 @@ Migration status: The repo has been migrated from the temporary JavaScript ESM b
 - [x] M7-T5 session-events: keep runtime event/type/status names generic, with no milestone-specific runtime names.
 - [x] M7-T5 session-events: run session-events unit tests and compile checks.
 
+## Completed M9-T6 Session-Events HTTP/SSE Adapter
+
+- [x] M9-T6 session-events: add a dependency-free, framework-neutral HTTP/SSE stream adapter with an injected auth/session authorization gate before stream open.
+- [x] M9-T6 session-events: return `text/event-stream` response metadata, SSE event frames, heartbeat keepalive frames, and disconnect close logs.
+- [x] M9-T6 session-events: support `Last-Event-ID` replay status, replay-miss refresh guidance, and metadata-only lifecycle logs.
+- [x] M9-T6 session-events: add focused unittest coverage for auth deny, headers, event IDs, heartbeat, disconnect close logging, replay-miss guidance, and sensitive log metadata rejection.
+
 ## Pending Architecture Tasks
 
 - [ ] REPO-001: decide final language/runtime, framework, package manager, package layout, migration cost, deployment target, and test strategy for this repo.
 - [x] REPO-002: migrate the session-events bootstrap to a Python package layout initially, with equivalent behavior and tests, before broad new feature work continues; revisit Java only if long-running high-concurrency requirements justify it.
 - [ ] EVT-002: align `SessionEvent` envelope and payload validation with versioned shared contracts after `ai-assist-contracts` publishes them.
-- [ ] EVT-003: add authenticated SSE HTTP route adapter with server-derived identity and session authorization checks.
+- [x] EVT-003: add authenticated SSE HTTP route adapter with server-derived identity and session authorization checks.
 - [x] EVT-003: add client reconnect behavior contract tests for `Last-Event-ID`, unavailable replay, duplicate event IDs, and HTTP state refresh guidance.
 - [ ] EVT-003 / E2E-002: add integration tests for authenticated SSE streaming of progress, assistant delta, assistant final, error, and action events.
 - [x] EVT-003: ensure assistant delta, assistant final, progress, error, action proposed, and action status changed event types are covered by shared payload tests.
