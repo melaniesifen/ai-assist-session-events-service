@@ -24,7 +24,7 @@ This service does not own:
 
 The package is dependency-free Python using only the standard library. It exports transport helpers plus a stdlib HTTP runtime for the canonical SSE route.
 
-`src/ai_assist_session_events/http_sse.py` provides a framework-neutral authenticated stream adapter. `src/ai_assist_session_events/http_runtime.py` wraps that adapter in a runnable stdlib HTTP runtime for `GET /sessions/{sessionId}/events`. The runtime requires a server-derived auth context, defaulting to trusted upstream headers `X-AI-Assist-Tenant-Id` and `X-AI-Assist-User-Id`, emits `text/event-stream`, supports `Last-Event-ID` replay, heartbeat keepalive frames, disconnect close logs, and metadata-only lifecycle records.
+`src/ai_assist_session_events/http_sse.py` provides a framework-neutral authenticated stream adapter. `src/ai_assist_session_events/http_runtime.py` wraps that adapter in a runnable stdlib HTTP runtime for `GET /sessions/{sessionId}/events`. `src/ai_assist_session_events/http_app.py` exposes that runtime through the deployable dogfood HTTP adapter. The runtime requires a server-derived auth context, defaulting to trusted upstream headers `X-AI-Assist-Tenant-Id` and `X-AI-Assist-User-Id`, emits `text/event-stream`, supports `Last-Event-ID` replay, heartbeat keepalive frames, disconnect close logs, and metadata-only lifecycle records.
 
 SSE is a best-effort display path. Durable state must still be fetched over HTTP after reconnects, browser refreshes, or sequence gaps.
 

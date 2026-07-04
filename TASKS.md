@@ -56,6 +56,11 @@ Migration status: The repo has been migrated from the temporary JavaScript ESM b
 - [x] M9-T9.10 session-events: require trusted upstream tenant/user auth context before stream open and preserve injected authorizer support for real product-session validation.
 - [x] M9-T9.10 session-events: verify canonical route matching, auth denial, `Last-Event-ID` replay, route-alias rejection, and cross-session denial with focused unittest coverage.
 
+## Completed M10-T5 Real SSE Dogfood Runtime Slice
+
+- [x] M10-T5 session-events: expose the real `GET /sessions/{sessionId}/events` stream runtime through package `http_app.handle_http_request` for the shared dogfood dispatcher.
+- [x] M10-T5 session-events: verify `text/event-stream`, event IDs, keepalive/disconnect close support, `Last-Event-ID` replay or refresh guidance, duplicate suppression, and malformed-event rejection through deterministic HTTP adapter tests.
+
 ## Pending Architecture Tasks
 
 - [ ] REPO-001: decide final language/runtime, framework, package manager, package layout, migration cost, deployment target, and test strategy for this repo.
