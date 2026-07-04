@@ -7,6 +7,7 @@ from .http_sse import (
     SseHttpStreamAdapter,
     create_sse_response_headers,
 )
+from .http_runtime import SessionEventsHttpRuntime, create_http_handler, serve_http
 from .publisher import InMemorySessionEventPublisher, PUBLISHER_FAILURE_CATEGORIES
 from .reconnect import (
     create_event_deduplicator,
@@ -46,6 +47,7 @@ __all__ = [
     "SessionEventPublisherError",
     "SessionEventValidationError",
     "SessionAuthorization",
+    "SessionEventsHttpRuntime",
     "SseHttpStreamAdapter",
     "assert_valid_session_event",
     "create_action_proposed_event",
@@ -53,6 +55,7 @@ __all__ = [
     "create_assistant_delta_event",
     "create_assistant_final_event",
     "create_event_deduplicator",
+    "create_http_handler",
     "create_progress_event",
     "create_safe_error_event",
     "create_session_event",
@@ -63,5 +66,6 @@ __all__ = [
     "format_sse_retry",
     "reconnect_recovery_guidance",
     "replay_status_for_last_event_id",
+    "serve_http",
     "validate_session_event",
 ]
